@@ -26,12 +26,6 @@ export default async function handler(req, res) {
     const records = parse(csvText, { columns: true, skip_empty_lines: true, trim: true });
 
     // Filter
-    const wantEntity = String(entity).toUpperCase();
-    const wantPI = String(pi).toUpperCase(); // e.g., "PI1"
-    const start = parseInt(start_year, 10);
-    const end = parseInt(end_year, 10);
-
-    // Filter
     const rows = records
       .filter(r => {
         const yr = parseInt(r.Year, 10);
