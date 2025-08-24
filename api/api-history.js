@@ -31,13 +31,16 @@ export default async function handler(req, res) {
     const start = parseInt(start_year, 10);
     const end = parseInt(end_year, 10);
 
+    // Filter
     const rows = records
       .filter(r => {
         const yr = parseInt(r.Year, 10);
         if (Number.isNaN(yr)) return false;
+    
         const entityOk = String(r.Entity || "").toUpperCase() === wantEntity;
-        const piOk = String(r.Performance_Indicator || "").toUpperCase().startsWith(wantPI);
+        const piOk = String(r.Performance_Indicator || "").toUpperCase().startsWith(wantPI); // e.g. "PI1"
         const yearOk = yr >= start && yr <= end;
+    
         return entityOk && piOk && yearOk;
       })
       .map(r => ({
@@ -48,6 +51,9 @@ export default async function handler(req, res) {
         Score: r.Score !== "" && r.Score != null ? Number(r.Score) : null
       }));
 
+
+
+    
     return res.status(200).json({ entity, pi, start_year, end_year, rows });
   } catch (e) {
     console.error(e);
