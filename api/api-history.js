@@ -1,49 +1,80 @@
 // api/api-history.js
 import { parse } from "csv-parse/sync";
 
-// Extract exact PI code (e.g., "PI1", "PI10") from the start of the field
+// Helper: extract PI code from Performance_Indicator field
 function extractPiCode(s) {
   if (!s) return null;
-  const t = String(s).toUpperCase().replace(/\u00A0/g, " ").trim(); // normalize NBSP
+  const t = String(s).toUpperCase().replace(/\u00A0/g, " ").trim();
   const m = t.match(/^PI\d{1,2}\b/);
   return m ? m[0] : null;
 }
 
+// Helper: normalize string for comparison
+function normalizeString(s) {
+  if (!s) return null;
+  return String(s).toUpperCase().replace(/\u00A0/g, " ").trim();
+}
+
+// Helper: safe integer conversion
+function safeParseInt(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const num = parseInt(value, 10);
+  return isNaN(num) ? null : num;
+}
+
 export default async function handler(req, res) {
   try {
-    const method = (req.method || "GET").toUpperCase();
-
-    // Accept both GET (query) and POST (body)
-    let entity, pi, start_year, end_year;
+    // Support both GET (query params) and POST (body)
+    const method = req.method.toUpperCase();
+    let params;
+    
     if (method === "GET") {
-      ({ entity, pi, start_year, end_year } = req.query || {});
+      params = req.query || {};
     } else if (method === "POST") {
-      ({ entity, pi, start_year, end_year } = req.body || {});
+      params = req.body || {};
     } else {
       res.setHeader("Allow", "GET, POST");
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       return res.status(405).json({ error: "Use GET with query params or POST with JSON body" });
     }
 
-    // Basic presence checks
-    if (!entity || !pi || start_year == null || end_year == null) {
+    // Extract all possible filter parameters
+    const {
+      entity,
+      type,
+      performance_area,
+      pi,
+      ratings,
+      score,
+      start_year,
+      end_year,
+      limit
+    } = params;
+
+    // Validate year parameters if provided
+    const startYear = safeParseInt(start_year);
+    const endYear = safeParseInt(end_year);
+    const scoreFilter = safeParseInt(score);
+    const limitFilter = safeParseInt(limit) || null;
+
+    if (start_year && startYear === null) {
       res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.status(400).json({ error: "Missing params: entity, pi, start_year, end_year" });
+      return res.status(400).json({ error: "start_year must be a valid integer" });
+    }
+    
+    if (end_year && endYear === null) {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      return res.status(400).json({ error: "end_year must be a valid integer" });
     }
 
-    // Normalize/validate inputs
-    const wantEntity = String(entity).toUpperCase().trim();
-    const wantPI = String(pi).toUpperCase().trim(); // e.g., "PI2"
-    const start = parseInt(start_year, 10);
-    const end = parseInt(end_year, 10);
-
-    if (Number.isNaN(start) || Number.isNaN(end)) {
+    if (startYear && endYear && startYear > endYear) {
       res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.status(400).json({ error: "start_year and end_year must be integers" });
+      return res.status(400).json({ error: "start_year cannot be greater than end_year" });
     }
-    if (start > end) {
+
+    if (limitFilter && (limitFilter < 1 || limitFilter > 1000)) {
       res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.status(400).json({ error: "start_year must be ≤ end_year" });
+      return res.status(400).json({ error: "limit must be between 1 and 1000" });
     }
 
     const csvUrl = process.env.CSV_URL;
@@ -56,38 +87,98 @@ export default async function handler(req, res) {
     const resp = await fetch(csvUrl);
     if (!resp.ok) throw new Error(`CSV download failed: ${resp.status}`);
     const csvText = await resp.text();
-
     const records = parse(csvText, { columns: true, skip_empty_lines: true, trim: true });
 
-    // Filter
-    const rows = records
-      .filter(r => {
-        const yr = parseInt(r.Year, 10);
-        if (Number.isNaN(yr)) return false;
+    // Normalize filter values
+    const wantEntity = entity ? normalizeString(entity) : null;
+    const wantType = type ? normalizeString(type) : null;
+    const wantPerformanceArea = performance_area ? normalizeString(performance_area) : null;
+    const wantPI = pi ? normalizeString(pi) : null;
+    const wantRatings = ratings ? normalizeString(ratings) : null;
 
-        const entityOk = String(r.Entity || "").toUpperCase().trim() === wantEntity;
+    // Filter records
+    let filteredRows = records.filter(r => {
+      // Year filter
+      const recordYear = safeParseInt(r.Year);
+      if (recordYear === null) return false;
+      if (startYear && recordYear < startYear) return false;
+      if (endYear && recordYear > endYear) return false;
+
+      // Entity filter
+      if (wantEntity) {
+        const recordEntity = normalizeString(r.Entity);
+        if (recordEntity !== wantEntity) return false;
+      }
+
+      // Type filter
+      if (wantType) {
+        const recordType = normalizeString(r.Type);
+        if (recordType !== wantType) return false;
+      }
+
+      // Performance Area filter
+      if (wantPerformanceArea) {
+        const recordPA = normalizeString(r.Performance_Area);
+        if (recordPA !== wantPerformanceArea) return false;
+      }
+
+      // PI filter
+      if (wantPI) {
         const code = extractPiCode(r.Performance_Indicator);
-        const piOk = code === wantPI;
-        const yearOk = yr >= start && yr <= end;
+        if (code !== wantPI) return false;
+      }
 
-        return entityOk && piOk && yearOk;
-      })
-      .map(r => ({
-        Entity: r.Entity,
-        Year: Number(r.Year),
-        PerformanceIndicator: r.Performance_Indicator,
-        Ratings: r.Ratings || null,
-        Score: r.Score !== "" && r.Score != null ? Number(r.Score) : null
-      }));
+      // Ratings filter
+      if (wantRatings) {
+        const recordRatings = normalizeString(r.Ratings);
+        if (recordRatings !== wantRatings) return false;
+      }
+
+      // Score filter
+      if (scoreFilter !== null) {
+        const recordScore = safeParseInt(r.Score);
+        if (recordScore !== scoreFilter) return false;
+      }
+
+      return true;
+    });
+
+    // Transform records to consistent format
+    const transformedRows = filteredRows.map(r => ({
+      Entity: r.Entity,
+      Type: r.Type || null,
+      Year: safeParseInt(r.Year),
+      Performance_Area: r.Performance_Area || null,
+      PerformanceIndicator: r.Performance_Indicator,
+      Ratings: r.Ratings || null,
+      Score: safeParseInt(r.Score)
+    }));
+
+    // Apply limit if specified
+    const totalRecords = transformedRows.length;
+    const finalRows = limitFilter ? transformedRows.slice(0, limitFilter) : transformedRows;
+
+    // Prepare response
+    const response = {
+      filters: {
+        entity: entity || null,
+        type: type || null,
+        performance_area: performance_area || null,
+        pi: pi || null,
+        ratings: ratings || null,
+        score: scoreFilter,
+        start_year: startYear,
+        end_year: endYear,
+        limit: limitFilter
+      },
+      total_records: totalRecords,
+      returned_records: finalRows.length,
+      rows: finalRows
+    };
 
     res.setHeader("Content-Type", "application/json; charset=utf-8");
-    return res.status(200).json({
-      entity: wantEntity,
-      pi: wantPI,
-      start_year: start,
-      end_year: end,
-      rows
-    });
+    return res.status(200).json(response);
+
   } catch (e) {
     console.error(e);
     res.setHeader("Content-Type", "application/json; charset=utf-8");
