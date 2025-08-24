@@ -1,27 +1,35 @@
 // api/api-history.js
 import { parse } from "csv-parse/sync";
 
-// Helper: extract exact PI code (e.g., "PI1", "PI10") from the start of the field
+// Helper: extract PI code from Performance_Indicator field
 function extractPiCode(s) {
   if (!s) return null;
-  const t = String(s).toUpperCase().replace(/\u00A0/g, " ").trim(); // normalize NBSP
+  const t = String(s).toUpperCase().replace(/\u00A0/g, " ").trim();
   const m = t.match(/^PI\d{1,2}\b/);
   return m ? m[0] : null;
 }
 
 export default async function handler(req, res) {
   try {
-    // Method guard
-    if (req.method !== "POST") {
-      res.setHeader("Allow", "POST");
+    // Support both GET (query params) and POST (body)
+    const method = req.method.toUpperCase();
+
+    let entity, pi, start_year, end_year;
+    if (method === "GET") {
+      ({ entity, pi, start_year, end_year } = req.query || {});
+    } else if (method === "POST") {
+      ({ entity, pi, start_year, end_year } = req.body || {});
+    } else {
+      res.setHeader("Allow", "GET, POST");
       res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.status(405).json({ error: "Use POST" });
+      return res.status(405).json({ error: "Use GET with query params or POST with JSON body" });
     }
 
-    const { entity, pi, start_year, end_year } = req.body || {};
     if (!entity || !pi || !start_year || !end_year) {
       res.setHeader("Content-Type", "application/json; charset=utf-8");
-      return res.status(400).json({ error: "Missing params: entity, pi, start_year, end_year" });
+      return res.status(400).json({
+        error: "Missing params: entity, pi, start_year, end_year"
+      });
     }
 
     const csvUrl = process.env.CSV_URL;
@@ -30,32 +38,25 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "CSV_URL env not set" });
     }
 
-    // Fetch CSV
     const resp = await fetch(csvUrl);
     if (!resp.ok) throw new Error(`CSV download failed: ${resp.status}`);
     const csvText = await resp.text();
 
-    // Parse CSV
     const records = parse(csvText, { columns: true, skip_empty_lines: true, trim: true });
 
-    // Normalize inputs
     const wantEntity = String(entity).toUpperCase().trim();
-    const wantPI = String(pi).toUpperCase().trim(); // e.g., "PI1"
+    const wantPI = String(pi).toUpperCase().trim();
     const start = parseInt(start_year, 10);
     const end = parseInt(end_year, 10);
 
-    // Filter rows
     const rows = records
       .filter(r => {
         const yr = parseInt(r.Year, 10);
         if (Number.isNaN(yr)) return false;
 
         const entityOk = String(r.Entity || "").toUpperCase().trim() === wantEntity;
-
-        // Exact PI code match from the start of the Performance_Indicator field
         const code = extractPiCode(r.Performance_Indicator);
         const piOk = code === wantPI;
-
         const yearOk = yr >= start && yr <= end;
 
         return entityOk && piOk && yearOk;
