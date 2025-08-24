@@ -67,6 +67,7 @@ export default async function handler(req, res) {
         Score: r.Score !== "" && r.Score != null ? Number(r.Score) : null
       }));
 
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
     return res.status(200).json({ entity, pi, start_year, end_year, rows });
   } catch (e) {
     console.error(e);
