@@ -1,0 +1,8 @@
+{
+  "name": "unswap-scores",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "csv-parse": "^5.5.6"
+  }
+}
