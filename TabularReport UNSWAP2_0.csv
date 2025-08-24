@@ -1,4 +1,4 @@
-﻿Entity - Short Name,Entity - Type,Report - Year,Report - Status,Performance Area,Performance Indicator,PI - Ratings,PI - Ratings Score
+﻿Entity,Type,Year,Status,Performance Area,Performance Indicator,Ratings,Score
 CTBTO,Technical focus,2020,Finalized,Results-Based Management,PI1 Strategic Planning Gender-Related SDG Results,Missing,2
 CTBTO,Technical focus,2020,Finalized,Results-Based Management,PI2 Reporting on Gender-Related SDG Results,Missing,2
 CTBTO,Technical focus,2020,Finalized,Results-Based Management,PI3 Programmatic Gender-Related SDG Results not Directly Captured in the Strategic Plan,Not Applicable,1
@@ -8481,4 +8481,5 @@ WTO,Technical focus,2023,In Progress,Human And Financial Resources,PI13 Organiza
 WTO,Technical focus,2023,In Progress,Capacity,PI14 Capacity Assessment,Missing,2
 WTO,Technical focus,2023,In Progress,Capacity,PI15 Capacity Development,Meets requirements,4
 WTO,Technical focus,2023,In Progress,"Knowledge, Communication And Coherence",PI16 Knowledge and Communication,Meets requirements,4
+
 WTO,Technical focus,2023,In Progress,"Knowledge, Communication And Coherence",PI17 Coherence,Approaches requirements,3
