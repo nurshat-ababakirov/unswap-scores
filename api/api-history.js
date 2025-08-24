@@ -11,17 +11,22 @@ function extractPiCode(s) {
 
 export default async function handler(req, res) {
   try {
+    // Method guard
     if (req.method !== "POST") {
+      res.setHeader("Allow", "POST");
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
       return res.status(405).json({ error: "Use POST" });
     }
 
     const { entity, pi, start_year, end_year } = req.body || {};
     if (!entity || !pi || !start_year || !end_year) {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
       return res.status(400).json({ error: "Missing params: entity, pi, start_year, end_year" });
     }
 
     const csvUrl = process.env.CSV_URL;
     if (!csvUrl) {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
       return res.status(500).json({ error: "CSV_URL env not set" });
     }
 
@@ -31,11 +36,7 @@ export default async function handler(req, res) {
     const csvText = await resp.text();
 
     // Parse CSV
-    const records = parse(csvText, {
-      columns: true,
-      skip_empty_lines: true,
-      trim: true
-    });
+    const records = parse(csvText, { columns: true, skip_empty_lines: true, trim: true });
 
     // Normalize inputs
     const wantEntity = String(entity).toUpperCase().trim();
@@ -71,6 +72,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ entity, pi, start_year, end_year, rows });
   } catch (e) {
     console.error(e);
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
     return res.status(500).json({ error: String(e.message || e) });
   }
 }
